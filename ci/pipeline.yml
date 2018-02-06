@@ -1,0 +1,144 @@
+---
+jobs:
+- name: grafana-d
+  serial: true
+  plan:
+  - do:
+    - get: src
+      trigger: true
+    - task: build
+      file: src/ci/build.yml
+      output_mapping: {build: d-build}
+      params:
+        ENV_DOMAIN: d.cld.gov.au
+    - put: d-cf
+      params:
+        manifest: d-build/manifest.yml
+        path: d-build
+        current_app_name: grafana
+        show_app_log: true
+    on_success:
+      put: slack
+      params:
+        text: |
+          :white_check_mark: $BUILD_JOB_NAME SUCCESS
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+    on_failure:
+      put: slack
+      params:
+        text: |
+          :x: $BUILD_JOB_NAME FAILED
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+- name: grafana-y
+  serial: true
+  plan:
+  - do:
+    - get: src
+      passed: [grafana-d]
+    - task: build
+      file: src/ci/build.yml
+      output_mapping: {build: y-build}
+      params:
+        ENV_DOMAIN: y.cld.gov.au
+    - put: y-cf
+      params:
+        manifest: y-build/manifest.yml
+        path: y-build
+        current_app_name: grafana
+        show_app_log: true
+    on_success:
+      put: slack
+      params:
+        text: |
+          :white_check_mark: $BUILD_JOB_NAME SUCCESS
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+    on_failure:
+      put: slack
+      params:
+        text: |
+          :x: $BUILD_JOB_NAME FAILED
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+- name: grafana-b
+  serial: true
+  plan:
+  - do:
+    - get: src
+      passed: [grafana-y]
+    - task: build
+      file: src/ci/build.yml
+      output_mapping: {build: b-build}
+      params:
+        ENV_DOMAIN: b.cld.gov.au
+    - put: b-cf
+      params:
+        manifest: b-build/manifest.yml
+        path: b-build
+        current_app_name: grafana
+        show_app_log: true
+    on_success:
+      put: slack
+      params:
+        text: |
+          :white_check_mark: $BUILD_JOB_NAME SUCCESS
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+    on_failure:
+      put: slack
+      params:
+        text: |
+          :x: $BUILD_JOB_NAME FAILED
+          <$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|View build details>
+image_resource:
+  type: docker-image
+  source:
+    repository: govau/cga-cf-bosh-cli
+    tag: latest
+
+resources:
+- name: src
+  type: git
+  source:
+    uri: https://github.com/govau/grafana-cf
+    branch: master
+
+- name: b-cf
+  type: govau-cf
+  source:
+    api: https://api.system.b.cld.gov.au
+    username: ci-system-grafana
+    password: ((b-password))
+    organization: system
+    space: grafana
+
+- name: d-cf
+  type: govau-cf
+  source:
+    api: https://api.system.d.cld.gov.au
+    username: ci-system-grafana
+    password: ((d-password))
+    organization: system
+    space: grafana
+
+- name: y-cf
+  type: govau-cf
+  source:
+    api: https://api.system.y.cld.gov.au
+    username: ci-system-grafana
+    password: ((y-password))
+    organization: system
+    space: grafana
+
+- name: slack
+  type: slack-notification
+  source:
+    url: ((slack-webhook-url))
+
+resource_types:
+- name: slack-notification
+  type: docker-image
+  source:
+    repository: cfcommunity/slack-notification-resource
+- name: govau-cf
+  type: docker-image
+  source:
+    repository: govau/cf-resource
+    tag: tail

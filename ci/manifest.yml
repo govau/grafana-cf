@@ -1,0 +1,9 @@
+---
+buildpack: binary_buildpack
+memory: 256M
+services:
+- grafana-ups
+env:
+  UPS_NAMES: grafana-ups
+applications:
+- name: grafana
