@@ -24,6 +24,6 @@ cd ${ORIG_PWD}/src
 go install github.com/govau/grafana-cf/cmd/grafana-proxy
 
 # Copy artefacts to output directory
-cp "${ORIG_PWD}/src/go/bin/grafana-proxy" "${ORIG_PWD}/build/grafana-proxy"
+cp "${GOPATH}/bin/grafana-proxy" "${ORIG_PWD}/build/grafana-proxy"
 cp "${ORIG_PWD}/src/ci/Procfile" "${ORIG_PWD}/build/Procfile"
 printf "\ndomain: system.${ENV_DOMAIN}\n" | cat "${ORIG_PWD}/src/ci/manifest.yml" - > "${ORIG_PWD}/build/manifest.yml"
