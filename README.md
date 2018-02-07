@@ -9,7 +9,7 @@ This stands up a server that integrates with your CloudFoundry UAA, and will ser
 It will ensure that:
 
 1. The user is logged in, by doing OAuth with UAA.
-2. That the user show is logged, is a `SpaceDeveloper` for the given space ID.
+2. That the user who is logged in, is a `SpaceDeveloper` for the given space ID.
 3. That the only dashboards shown are those hard-coded in the app, and that only metrics associated with applications in that space are displayed.
 
 It is the responsibility of the caller to find a nice way to display a link to this, such as from an existing console.
