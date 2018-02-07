@@ -39,6 +39,7 @@ type GrafanaFilteringProxy struct {
 
 	cookieJarLock sync.Mutex
 	cookieJar     *cookiejar.Jar
+	cookieJarTTL  time.Time
 
 	applicationIDLock    sync.RWMutex
 	applicationIDToSpace map[string]string
@@ -388,12 +389,14 @@ func (gp *GrafanaFilteringProxy) cookies() (*cookiejar.Jar, error) {
 	gp.cookieJarLock.Lock()
 	defer gp.cookieJarLock.Unlock()
 
-	if gp.cookieJar == nil {
+	if gp.cookieJar == nil || time.Now().After(gp.cookieJarTTL) {
 		var err error
 		gp.cookieJar, err = gp.login()
 		if err != nil {
 			return nil, err
 		}
+		// apparently sessions last by default 86400 seconds - we'll discard after an hour
+		gp.cookieJarTTL = time.Now().Add(time.Hour)
 	}
 
 	return gp.cookieJar, nil
