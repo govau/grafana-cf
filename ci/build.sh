@@ -11,8 +11,8 @@ export GOPATH="${ORIG_PWD}/go"
 
 # Symlink our source dir from inside of our own GOPATH
 mkdir -p "${GOPATH}/src/github.com/govau"
-ln -s "${ORIG_PWD}/src" "${GOPATH}/github.com/govau/grafana-cf/"
-cd "${GOPATH}/src/github.com/18F/cg-dashboard"
+ln -s "${ORIG_PWD}/src" "${GOPATH}/github.com/govau/grafana-cf"
+cd "${GOPATH}/src/github.com/govau/grafana-cf"
 
 # Install go deps
 dep ensure
