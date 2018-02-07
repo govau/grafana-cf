@@ -35,7 +35,7 @@
 
 [[constraint]]
   name = "github.com/govau/cf-common"
-  version = "0.0.2"
+  version = "0.0.3"
 
 [[constraint]]
   name = "github.com/prometheus/prometheus"
