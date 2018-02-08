@@ -762,7 +762,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(csrfKey) != 64 {
+	if len(cookieAuthKey) != 64 {
 		log.Fatal("COOKIE_AUTH_KEY should be 64 hex-encoded bytes")
 	}
 
