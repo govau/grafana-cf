@@ -21,6 +21,7 @@ import (
 
 	cfenv "github.com/cloudfoundry-community/go-cfenv"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"github.com/govau/cf-common/env"
 	"github.com/govau/cf-common/uaa"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -59,6 +60,7 @@ func (gp *GrafanaFilteringProxy) allowedSpace(req *http.Request) string {
 	return verifiedSpace
 }
 
+// w can be nil
 func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseWriter, authenticated bool, filter func(io.Writer, io.Reader) error) {
 	if authenticated {
 		cj, err := gp.cookies()
@@ -71,15 +73,21 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
+		if w != nil {
+			w.WriteHeader(http.StatusBadGateway)
+		}
 		return
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	w.WriteHeader(resp.StatusCode)
+	if w != nil {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+	}
 	if filter == nil {
-		io.Copy(w, resp.Body)
+		if w != nil {
+			io.Copy(w, resp.Body)
+		}
 	} else {
 		filter(w, resp.Body)
 	}
@@ -138,9 +146,10 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 					}
 				}
 
-				gp.applicationIDLock.RLock()
-				spaceForAppID := gp.applicationIDToSpace[appID]
-				gp.applicationIDLock.RUnlock()
+				spaceForAppID, err := gp.getSpaceForApp(appID)
+				if err != nil {
+					return nil, err
+				}
 
 				if spaceForAppID != verifiedSpace {
 					return nil, errors.New("application id not recognized as belonging to a space the user has access to")
@@ -216,25 +225,72 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	gp.makeAuthenticatedPrivilegedRequestWithFilter(req, w, func(out io.Writer, in io.Reader) error {
-		var data struct {
-			Status string              `json:"status"`
-			Data   []map[string]string `json:"data"`
+	gp.makeAuthenticatedPrivilegedRequestWithFilter(req, w, gp.saveSpaceIDsForApps)
+}
+
+func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string) (string, error) {
+	for attempt := 0; ; attempt++ {
+		gp.applicationIDLock.RLock()
+		spaceForAppID := gp.applicationIDToSpace[appID]
+		gp.applicationIDLock.RUnlock()
+
+		if spaceForAppID != "" {
+			return spaceForAppID, nil
 		}
-		err := json.NewDecoder(in).Decode(&data)
+
+		if attempt > 1 {
+			return "", errors.New("no space found")
+		}
+
+		// Else, let's see if we can look it up.
+		u := *gp.GrafanaURL
+		u.Path = "/api/datasources/proxy/1/api/v1/series"
+		u.RawQuery = (url.Values{
+			"match[]": []string{(&promql.VectorSelector{
+				Name: "cf_application_info",
+				LabelMatchers: []*labels.Matcher{
+					&labels.Matcher{
+						Name:  "application_id",
+						Type:  labels.MatchEqual,
+						Value: appID,
+					},
+				},
+			}).String()},
+		}).Encode()
+
+		req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 		if err != nil {
-			return err
+			return "", err
 		}
 
-		// Siphon this info off, as we'll need later.
-		gp.applicationIDLock.Lock()
-		for _, ai := range data.Data {
-			gp.applicationIDToSpace[ai["application_id"]] = ai["space_id"]
-		}
-		gp.applicationIDLock.Unlock()
+		gp.makeAuthenticatedPrivilegedRequestWithFilter(req, nil, gp.saveSpaceIDsForApps)
+	}
 
-		return json.NewEncoder(w).Encode(&data)
-	})
+}
+
+// out can be nil
+func (gp *GrafanaFilteringProxy) saveSpaceIDsForApps(out io.Writer, in io.Reader) error {
+	var data struct {
+		Status string              `json:"status"`
+		Data   []map[string]string `json:"data"`
+	}
+	err := json.NewDecoder(in).Decode(&data)
+	if err != nil {
+		return err
+	}
+
+	// Siphon this info off, as we'll need later.
+	gp.applicationIDLock.Lock()
+	for _, ai := range data.Data {
+		gp.applicationIDToSpace[ai["application_id"]] = ai["space_id"]
+	}
+	gp.applicationIDLock.Unlock()
+
+	if out == nil {
+		return nil
+	}
+
+	return json.NewEncoder(out).Encode(&data)
 }
 
 func (gp *GrafanaFilteringProxy) proxyPublicGet(w http.ResponseWriter, r *http.Request) {
@@ -702,14 +758,31 @@ func main() {
 		log.Fatal("CSRF_KEY should be 32 hex-encoded bytes")
 	}
 
-	oauthBase := envVars.MustString("EXTERNAL_URL")
-	if envVars.MustBool("INSECURE") {
-		oauthBase = "http://localhost:8000"
+	cookieAuthKey, err := hex.DecodeString(envVars.MustString("COOKIE_AUTH_KEY"))
+	if err != nil {
+		log.Fatal(err)
 	}
+	if len(csrfKey) != 64 {
+		log.Fatal("COOKIE_AUTH_KEY should be 64 hex-encoded bytes")
+	}
+
+	cookieEncKey, err := hex.DecodeString(envVars.MustString("COOKIE_ENCRYPTION_KEY"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(cookieEncKey) != 32 {
+		log.Fatal("COOKIE_ENCRYPTION_KEY should be 32 hex-encoded bytes")
+	}
+
+	cookieStore := sessions.NewCookieStore(cookieAuthKey, cookieEncKey)
+	cookieStore.Options.HttpOnly = true
+	cookieStore.Options.Secure = true
+
+	oauthBase := envVars.MustString("EXTERNAL_URL")
 
 	uaaURL := envVars.MustString("UAA_URL")
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", envVars.MustString("PORT")), (&uaa.LoginHandler{
-		Cookies: uaa.MustCreateBasicCookieHandler(envVars.MustBool("INSECURE")),
+		Cookies: cookieStore,
 		UAA: &uaa.Client{
 			URL:          uaaURL,
 			ClientID:     envVars.MustString("CLIENT_ID"),

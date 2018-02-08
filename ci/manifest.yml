@@ -1,6 +1,7 @@
 ---
 buildpack: binary_buildpack
 memory: 256M
+instances: 2
 services:
 - grafana-ups
 env:
