@@ -373,6 +373,11 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (gp *GrafanaFilteringProxy) apiAnnotations(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]struct{}{})
+}
+
 func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode([]struct {
@@ -442,6 +447,7 @@ func (gp *GrafanaFilteringProxy) InitAndCreateHTTPHandler() http.Handler {
 	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/series").HandlerFunc(gp.fetchSeries)
 	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
 	r.Path("/space/{space_id}/api/search").HandlerFunc(gp.apiSearch)
+	r.Path("/space/{space_id}/api/annotations").HandlerFunc(gp.apiAnnotations)
 	return r
 }
 
