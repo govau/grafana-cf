@@ -395,7 +395,7 @@ func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Reques
 			Title: "Apps: Latency",
 			Type:  "dash-db",
 			Tags:  []string{"apps"},
-			URI:   "d/cf_apps_latency/apps-latency",
+			URI:   "../d/cf_apps_latency/apps-latency",
 			URL:   "d/cf_apps_latency/apps-latency",
 		},
 		{
@@ -403,7 +403,7 @@ func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Reques
 			Title: "Apps: Requests",
 			Type:  "dash-db",
 			Tags:  []string{"apps"},
-			URI:   "d/cf_apps_requests/apps-requests",
+			URI:   "../d/cf_apps_requests/apps-requests",
 			URL:   "d/cf_apps_requests/apps-requests",
 		},
 		{
@@ -411,7 +411,7 @@ func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Reques
 			Title: "Apps: System",
 			Type:  "dash-db",
 			Tags:  []string{"apps"},
-			URI:   "d/cf_apps_system/apps-system",
+			URI:   "../d/cf_apps_system/apps-system",
 			URL:   "d/cf_apps_system/apps-system",
 		},
 	})
