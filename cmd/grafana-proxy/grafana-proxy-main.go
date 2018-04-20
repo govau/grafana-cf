@@ -35,7 +35,7 @@ type GrafanaFilteringProxy struct {
 	GrafanaUsername string
 	GrafanaPassword string
 
-	Dashboards []string
+	Dashboards map[string]string
 	Orgs       []string
 
 	cookieJarLock sync.Mutex
@@ -171,7 +171,7 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/1/api/v1/query_range"
+	u.Path = "/api/datasources/proxy/2/api/v1/query_range"
 	u.RawQuery = (url.Values{
 		"query": []string{filteredQuery},
 		"step":  []string{r.FormValue("step")},
@@ -212,7 +212,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/1/api/v1/series"
+	u.Path = "/api/datasources/proxy/2/api/v1/series"
 	u.RawQuery = (url.Values{
 		"match[]": []string{filteredMatch},
 		"start":   []string{r.FormValue("start")},
@@ -244,7 +244,7 @@ func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string) (string, error) {
 
 		// Else, let's see if we can look it up.
 		u := *gp.GrafanaURL
-		u.Path = "/api/datasources/proxy/1/api/v1/series"
+		u.Path = "/api/datasources/proxy/2/api/v1/series"
 		u.RawQuery = (url.Values{
 			"match[]": []string{(&promql.VectorSelector{
 				Name: "cf_application_info",
@@ -309,6 +309,7 @@ func (gp *GrafanaFilteringProxy) proxyPublicGet(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Since the user controls the path, this *must* be unauthenticated. Consider implementing whitelist of allowed paths
 	gp.makeUnauthenticatedRequest(req, w)
 }
 
@@ -320,14 +321,12 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 	}
 
 	desiredDashboard := mux.Vars(r)["dashboard"]
-	found := false
-	for _, t := range gp.Dashboards {
-		if t == desiredDashboard {
-			found = true
-			break
-		}
-	}
+	shortName, found := gp.Dashboards[desiredDashboard]
 	if !found {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	if shortName != mux.Vars(r)["shortName"] {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -350,7 +349,7 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 	refresh := r.FormValue("refresh")
 
 	u := *gp.GrafanaURL
-	u.Path = fmt.Sprintf("/dashboard/file/%s.json", url.PathEscape(desiredDashboard))
+	u.Path = fmt.Sprintf("/d/%s/%s", url.PathEscape(desiredDashboard), url.PathEscape(shortName))
 	u.RawQuery = (url.Values{
 		"orgId":   []string{desiredOrg},
 		"refresh": []string{refresh},
@@ -404,20 +403,14 @@ func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Reques
 
 func (gp *GrafanaFilteringProxy) proxyDashboardAPI(w http.ResponseWriter, r *http.Request) {
 	desiredDashboard := mux.Vars(r)["dashboard"]
-	found := false
-	for _, t := range gp.Dashboards {
-		if t == desiredDashboard {
-			found = true
-			break
-		}
-	}
+	_, found := gp.Dashboards[desiredDashboard]
 	if !found {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = fmt.Sprintf("/api/dashboards/file/%s.json", url.PathEscape(desiredDashboard))
+	u.Path = fmt.Sprintf("/api/dashboards/uid/%s", url.PathEscape(desiredDashboard))
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -433,10 +426,10 @@ func (gp *GrafanaFilteringProxy) InitAndCreateHTTPHandler() http.Handler {
 
 	r := mux.NewRouter()
 	r.PathPrefix("/space/{space_id}/public/").HandlerFunc(gp.proxyPublicGet)
-	r.Path("/space/{space_id}/dashboard/file/{dashboard}.json").HandlerFunc(gp.proxyDashboard)
-	r.Path("/space/{space_id}/api/dashboards/file/{dashboard}.json").HandlerFunc(gp.proxyDashboardAPI)
-	r.Path("/space/{space_id}/api/datasources/proxy/1/api/v1/series").HandlerFunc(gp.fetchSeries)
-	r.Path("/space/{space_id}/api/datasources/proxy/1/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
+	r.Path("/space/{space_id}/d/{dashboard}/{shortName}").HandlerFunc(gp.proxyDashboard)
+	r.Path("/space/{space_id}/api/dashboards/uid/{dashboard}").HandlerFunc(gp.proxyDashboardAPI)
+	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/series").HandlerFunc(gp.fetchSeries)
+	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
 	r.Path("/space/{space_id}/api/search").HandlerFunc(gp.apiSearch)
 	return r
 }
@@ -808,10 +801,10 @@ func main() {
 		GrafanaURL:      MustParseURL(envVars.MustString("GRAFANA_URL")),
 		GrafanaUsername: (envVars.MustString("GRAFANA_USERNAME")),
 		GrafanaPassword: (envVars.MustString("GRAFANA_PASSWORD")),
-		Dashboards: []string{
-			"cf_apps_system",
-			"cf_apps_latency",
-			"cf_apps_requests",
+		Dashboards: map[string]string{
+			"cf_apps_system":   "apps-system",
+			"cf_apps_latency":  "apps-latency",
+			"cf_apps_requests": "apps-request",
 		},
 		Orgs: []string{
 			"1",
