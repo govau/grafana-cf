@@ -377,26 +377,37 @@ func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode([]struct {
 		ID      int      `json:"id"`
+		UID     string   `json:"uid"`
 		Starred bool     `json:"isStarred"`
 		Tags    []string `json:"tags"`
 		Title   string   `json:"title"`
-		Type    string   `json:"dash-json"`
+		Type    string   `json:"type"`
 		URI     string   `json:"uri"`
+		URL     string   `json:"url"`
 	}{
 		{
+			UID:   "cf_apps_latency",
 			Title: "Apps: Latency",
-			Type:  "dash-json",
-			URI:   "file/cf_apps_latency.json",
+			Type:  "dash-db",
+			Tags:  []string{"apps"},
+			URI:   "db/apps-latency",
+			URL:   "d/cf_apps_latency/apps-latency",
 		},
 		{
+			UID:   "cf_apps_requests",
 			Title: "Apps: Requests",
-			Type:  "dash-json",
-			URI:   "file/cf_apps_requests.json",
+			Type:  "dash-db",
+			Tags:  []string{"apps"},
+			URI:   "db/apps-requests",
+			URL:   "d/cf_apps_requests/apps-requests",
 		},
 		{
+			UID:   "cf_apps_system",
 			Title: "Apps: System",
-			Type:  "dash-json",
-			URI:   "file/cf_apps_system.json",
+			Type:  "dash-db",
+			Tags:  []string{"apps"},
+			URI:   "db/apps-system",
+			URL:   "d/cf_apps_system/apps-system",
 		},
 	})
 }
