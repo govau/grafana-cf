@@ -444,8 +444,8 @@ func (gp *GrafanaFilteringProxy) InitAndCreateHTTPHandler() http.Handler {
 	r.PathPrefix("/space/{space_id}/public/").HandlerFunc(gp.proxyPublicGet)
 	r.Path("/space/{space_id}/d/{dashboard}/{shortName}").HandlerFunc(gp.proxyDashboard)
 	r.Path("/space/{space_id}/api/dashboards/uid/{dashboard}").HandlerFunc(gp.proxyDashboardAPI)
-	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/series").HandlerFunc(gp.fetchSeries)
-	r.Path("/space/{space_id}/api/datasources/proxy/2/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
+	r.Path("/space/{space_id}/api/datasources/proxy/3/api/v1/series").HandlerFunc(gp.fetchSeries)
+	r.Path("/space/{space_id}/api/datasources/proxy/3/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
 	r.Path("/space/{space_id}/api/search").HandlerFunc(gp.apiSearch)
 	r.Path("/space/{space_id}/api/annotations").HandlerFunc(gp.apiAnnotations)
 	return r
