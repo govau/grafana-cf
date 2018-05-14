@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -45,6 +46,16 @@ type GrafanaFilteringProxy struct {
 	applicationIDLock    sync.RWMutex
 	applicationIDToSpace map[string]string
 }
+
+var (
+	singleBlackPixel = func(s string) []byte {
+		rv, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			panic(err)
+		}
+		return rv
+	}(`iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNiOAMAANUAz5n+TlUAAAAASUVORK5CYII=`)
+)
 
 type contextKey string
 
@@ -164,14 +175,12 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 		},
 	}).Filter(r.FormValue("query"))
 	if err != nil {
-		log.Println(err)
-		log.Println(r.FormValue("query"))
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/2/api/v1/query_range"
+	u.Path = "/api/datasources/proxy/3/api/v1/query_range"
 	u.RawQuery = (url.Values{
 		"query": []string{filteredQuery},
 		"step":  []string{r.FormValue("step")},
@@ -212,7 +221,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/2/api/v1/series"
+	u.Path = "/api/datasources/proxy/3/api/v1/series"
 	u.RawQuery = (url.Values{
 		"match[]": []string{filteredMatch},
 		"start":   []string{r.FormValue("start")},
@@ -244,7 +253,7 @@ func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string) (string, error) {
 
 		// Else, let's see if we can look it up.
 		u := *gp.GrafanaURL
-		u.Path = "/api/datasources/proxy/2/api/v1/series"
+		u.Path = "/api/datasources/proxy/3/api/v1/series"
 		u.RawQuery = (url.Values{
 			"match[]": []string{(&promql.VectorSelector{
 				Name: "cf_application_info",
@@ -378,6 +387,16 @@ func (gp *GrafanaFilteringProxy) apiAnnotations(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode([]struct{}{})
 }
 
+func (gp *GrafanaFilteringProxy) tags(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]struct{}{})
+}
+
+func (gp *GrafanaFilteringProxy) avatar(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Write(singleBlackPixel)
+}
+
 func (gp *GrafanaFilteringProxy) apiSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode([]struct {
@@ -448,6 +467,9 @@ func (gp *GrafanaFilteringProxy) InitAndCreateHTTPHandler() http.Handler {
 	r.Path("/space/{space_id}/api/datasources/proxy/3/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
 	r.Path("/space/{space_id}/api/search").HandlerFunc(gp.apiSearch)
 	r.Path("/space/{space_id}/api/annotations").HandlerFunc(gp.apiAnnotations)
+	r.Path("/space/{space_id}/api/dashboards/tags").HandlerFunc(gp.tags)
+
+	r.Path("/avatar/{ignore}").HandlerFunc(gp.avatar)
 	return r
 }
 
@@ -664,7 +686,8 @@ func (pqf *PromQueryFilterer) filterExpr(expr promql.Expr) (promql.Expr, error) 
 }
 
 type VerifiedSpaceHandler struct {
-	CFAPIURL string
+	CFAPIURL    string
+	PassThrough []string
 
 	spaceUserLock  sync.Mutex
 	spaceUserToTTL map[string]time.Time
@@ -749,6 +772,9 @@ func (vsh *VerifiedSpaceHandler) Wrap(child http.Handler) http.Handler {
 
 		child.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), SpaceKey, desiredSpaceID)))
 	})
+	for _, pt := range vsh.PassThrough {
+		r.PathPrefix(pt).Handler(child)
+	}
 	return r
 }
 
@@ -786,7 +812,7 @@ func main() {
 
 	cookieStore := sessions.NewCookieStore(cookieAuthKey, cookieEncKey)
 	cookieStore.Options.HttpOnly = true
-	cookieStore.Options.Secure = true
+	cookieStore.Options.Secure = !envVars.MustBool("INSECURE_COOKIES")
 
 	oauthBase := envVars.MustString("EXTERNAL_URL")
 
@@ -813,7 +839,8 @@ func main() {
 			return false
 		},
 	}).Wrap((&VerifiedSpaceHandler{
-		CFAPIURL: envVars.MustString("CF_API_URL"),
+		CFAPIURL:    envVars.MustString("CF_API_URL"),
+		PassThrough: []string{"/avatar/{ignore}"},
 	}).Wrap((&GrafanaFilteringProxy{
 		GrafanaURL:      MustParseURL(envVars.MustString("GRAFANA_URL")),
 		GrafanaUsername: (envVars.MustString("GRAFANA_USERNAME")),
