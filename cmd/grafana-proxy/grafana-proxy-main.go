@@ -16,6 +16,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -122,6 +123,11 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
+	proxyIDNumber, err := strconv.Atoi(mux.Vars(r)["proxy_id"])
+	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 	filteredQuery, err := (&PromQueryFilterer{
 		FilterFunc: func(name string, lm []*labels.Matcher) (map[string]string, error) {
 			switch name {
@@ -157,7 +163,7 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 					}
 				}
 
-				spaceForAppID, err := gp.getSpaceForApp(appID)
+				spaceForAppID, err := gp.getSpaceForApp(appID, proxyIDNumber)
 				if err != nil {
 					return nil, err
 				}
@@ -203,6 +209,12 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
+	proxyIDNumber, err := strconv.Atoi(mux.Vars(r)["proxy_id"])
+	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	filteredMatch, err := (&PromQueryFilterer{
 		FilterFunc: func(name string, lm []*labels.Matcher) (map[string]string, error) {
 			if name != "cf_application_info" {
@@ -221,7 +233,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/3/api/v1/series"
+	u.Path = fmt.Sprintf("/api/datasources/proxy/%d/api/v1/series", proxyIDNumber)
 	u.RawQuery = (url.Values{
 		"match[]": []string{filteredMatch},
 		"start":   []string{r.FormValue("start")},
@@ -237,7 +249,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 	gp.makeAuthenticatedPrivilegedRequestWithFilter(req, w, gp.saveSpaceIDsForApps)
 }
 
-func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string) (string, error) {
+func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string, proxyIDNumber int) (string, error) {
 	for attempt := 0; ; attempt++ {
 		gp.applicationIDLock.RLock()
 		spaceForAppID := gp.applicationIDToSpace[appID]
@@ -253,7 +265,7 @@ func (gp *GrafanaFilteringProxy) getSpaceForApp(appID string) (string, error) {
 
 		// Else, let's see if we can look it up.
 		u := *gp.GrafanaURL
-		u.Path = "/api/datasources/proxy/3/api/v1/series"
+		u.Path = fmt.Sprintf("/api/datasources/proxy/%d/api/v1/series", proxyIDNumber)
 		u.RawQuery = (url.Values{
 			"match[]": []string{(&promql.VectorSelector{
 				Name: "cf_application_info",
@@ -459,12 +471,14 @@ func (gp *GrafanaFilteringProxy) proxyDashboardAPI(w http.ResponseWriter, r *htt
 func (gp *GrafanaFilteringProxy) InitAndCreateHTTPHandler() http.Handler {
 	gp.applicationIDToSpace = make(map[string]string)
 
+	// TODO: figure out what proxy_id is
+
 	r := mux.NewRouter()
 	r.PathPrefix("/space/{space_id}/public/").HandlerFunc(gp.proxyPublicGet)
 	r.Path("/space/{space_id}/d/{dashboard}/{shortName}").HandlerFunc(gp.proxyDashboard)
 	r.Path("/space/{space_id}/api/dashboards/uid/{dashboard}").HandlerFunc(gp.proxyDashboardAPI)
-	r.Path("/space/{space_id}/api/datasources/proxy/3/api/v1/series").HandlerFunc(gp.fetchSeries)
-	r.Path("/space/{space_id}/api/datasources/proxy/3/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
+	r.Path("/space/{space_id}/api/datasources/proxy/{proxy_id}/api/v1/series").HandlerFunc(gp.fetchSeries)
+	r.Path("/space/{space_id}/api/datasources/proxy/{proxy_id}/api/v1/query_range").HandlerFunc(gp.fetchQueryRange)
 	r.Path("/space/{space_id}/api/search").HandlerFunc(gp.apiSearch)
 	r.Path("/space/{space_id}/api/annotations").HandlerFunc(gp.apiAnnotations)
 	r.Path("/space/{space_id}/api/dashboards/tags").HandlerFunc(gp.tags)
