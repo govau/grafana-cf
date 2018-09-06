@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -98,6 +99,8 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 		w.WriteHeader(resp.StatusCode)
 		if resp.StatusCode == http.StatusInternalServerError {
 			log.Println("e2:", resp.Status)
+			ld, _ := httputil.DumpRequestOut(req, true)
+			log.Println(string(ld))
 		}
 	}
 	if filter == nil {
