@@ -88,6 +88,7 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 		if w != nil {
 			w.WriteHeader(http.StatusBadGateway)
 		}
+		log.Println("e1", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -95,6 +96,9 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 	if w != nil {
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
+		if resp.StatusCode == http.StatusInternalServerError {
+			log.Println("e2:", resp.Status)
+		}
 	}
 	if filter == nil {
 		if w != nil {
@@ -226,7 +230,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 		},
 	}).Filter(r.FormValue("match[]"))
 	if err != nil {
-		log.Println(err)
+		log.Println("e3:", err)
 		log.Println(r.FormValue("match[]"))
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -242,7 +246,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println(err)
+		log.Println("e4:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -327,7 +331,7 @@ func (gp *GrafanaFilteringProxy) proxyPublicGet(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println(err)
+		log.Println("e5:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -380,7 +384,7 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println(err)
+		log.Println("e6:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
