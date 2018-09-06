@@ -242,6 +242,7 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -326,6 +327,7 @@ func (gp *GrafanaFilteringProxy) proxyPublicGet(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -378,6 +380,7 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
