@@ -14,7 +14,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -89,7 +88,6 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 		if w != nil {
 			w.WriteHeader(http.StatusBadGateway)
 		}
-		log.Println("e1", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -97,11 +95,6 @@ func (gp *GrafanaFilteringProxy) makeRequest(req *http.Request, w http.ResponseW
 	if w != nil {
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
-		if resp.StatusCode == http.StatusInternalServerError {
-			log.Println("e2:", resp.Status)
-			ld, _ := httputil.DumpRequestOut(req, true)
-			log.Println(string(ld))
-		}
 	}
 	if filter == nil {
 		if w != nil {
@@ -193,7 +186,7 @@ func (gp *GrafanaFilteringProxy) fetchQueryRange(w http.ResponseWriter, r *http.
 	}
 
 	u := *gp.GrafanaURL
-	u.Path = "/api/datasources/proxy/3/api/v1/query_range"
+	u.Path = fmt.Sprintf("/api/datasources/proxy/%d/api/v1/query_range", proxyIDNumber)
 	u.RawQuery = (url.Values{
 		"query": []string{filteredQuery},
 		"step":  []string{r.FormValue("step")},
@@ -233,8 +226,6 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 		},
 	}).Filter(r.FormValue("match[]"))
 	if err != nil {
-		log.Println("e3:", err)
-		log.Println(r.FormValue("match[]"))
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -249,7 +240,6 @@ func (gp *GrafanaFilteringProxy) fetchSeries(w http.ResponseWriter, r *http.Requ
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println("e4:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -334,7 +324,6 @@ func (gp *GrafanaFilteringProxy) proxyPublicGet(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println("e5:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -387,7 +376,6 @@ func (gp *GrafanaFilteringProxy) proxyDashboard(w http.ResponseWriter, r *http.R
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println("e6:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
